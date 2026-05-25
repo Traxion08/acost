@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AWS Cost Calculator</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #ffffff;
+      --bg-secondary: #f7f7f5;
+      --bg-tertiary: #f0efe9;
+      --text-primary: #1a1a18;
+      --text-secondary: #5f5e5a;
+      --text-tertiary: #88877f;
+      --border: rgba(0,0,0,0.12);
+      --border-strong: rgba(0,0,0,0.2);
+      --success-bg: #eaf3de;
+      --success-text: #3b6d11;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --radius-xl: 16px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1c1c1a;
+        --bg-secondary: #252522;
+        --bg-tertiary: #2c2c2a;
+        --text-primary: #f0efe9;
+        --text-secondary: #b4b2a9;
+        --text-tertiary: #88877f;
+        --border: rgba(255,255,255,0.1);
+        --border-strong: rgba(255,255,255,0.18);
+        --success-bg: #173404;
+        --success-text: #97c459;
+      }
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container { max-width: 760px; margin: 0 auto; }
+
+    /* Header */
+    .page-header {
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .page-header h1 {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .page-header h1 .ti { font-size: 24px; color: #378ADD; }
+    .page-header p { font-size: 14px; color: var(--text-secondary); margin-top: 6px; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: var(--success-bg);
+      color: var(--success-text);
+      margin-top: 8px;
+    }
+
+    /* Service cards */
+    .service-card {
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-lg);
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+    .service-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 1rem;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s;
+    }
+    .service-header:hover { background: var(--bg-secondary); }
+    .service-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .service-info { flex: 1; }
+    .service-info h3 { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+    .service-info p { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .service-cost { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-right: 6px; }
+    .chevron { font-size: 16px; color: var(--text-tertiary); transition: transform 0.2s; }
+    .chevron.open { transform: rotate(180deg); }
+
+    .service-body { display: none; padding: 1rem; border-top: 0.5px solid var(--border); }
+    .service-body.open { display: block; }
+
+    .control-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .control-row:last-child { margin-bottom: 0; }
+    .control-label { width: 170px; flex-shrink: 0; }
+    .control-label .name { font-size: 13px; color: var(--text-primary); }
+    .control-label .hint { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+    input[type="range"] {
+      flex: 1;
+      accent-color: #378ADD;
+      cursor: pointer;
+    }
+    .control-val { font-size: 13px; font-weight: 600; color: var(--text-primary); min-width: 80px; text-align: right; }
+    select {
+      flex: 1;
+      font-size: 13px;
+      padding: 6px 10px;
+      border: 0.5px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      background: var(--bg);
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+
+    .service-tip {
+      margin-top: 12px;
+      padding: 8px 10px;
+      background: var(--bg-secondary);
+      border-radius: var(--radius-md);
+      font-size: 11px;
+      color: var(--text-tertiary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Summary */
+    .summary {
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 1.5rem;
+      margin-top: 1.5rem;
+    }
+    .summary-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+    .summary-header h2 { font-size: 16px; font-weight: 600; }
+    .export-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      padding: 6px 14px;
+      border: 0.5px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      background: var(--bg);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .export-btn:hover { background: var(--bg-secondary); }
+
+    .breakdown { display: grid; gap: 8px; margin-bottom: 1rem; }
+    .breakdown-row {
+      display: flex;
+      align-items: center;
+      padding: 9px 12px;
+      background: var(--bg-secondary);
+      border-radius: var(--radius-md);
+      font-size: 13px;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; }
+    .breakdown-name { color: var(--text-secondary); flex: 1; }
+    .breakdown-pct { font-size: 12px; color: var(--text-tertiary); margin-right: 12px; }
+    .breakdown-amount { font-weight: 600; color: var(--text-primary); }
+
+    .total-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      border-top: 0.5px solid var(--border);
+      padding-top: 1rem;
+    }
+    .total-label { font-size: 14px; color: var(--text-secondary); }
+    .total-amount { font-size: 32px; font-weight: 700; color: var(--text-primary); }
+    .total-period { font-size: 14px; color: var(--text-tertiary); margin-left: 4px; }
+
+    .free-note {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: var(--success-bg);
+      color: var(--success-text);
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .chart-wrap { position: relative; width: 100%; height: 180px; margin-top: 1.5rem; }
+
+    .footer {
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-top: 2rem;
+      padding-bottom: 1rem;
+    }
+    .footer a { color: #378ADD; text-decoration: none; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="page-header">
+    <h1><i class="ti ti-cloud"></i> AWS Cost Calculator</h1>
+    <p>Estimate your monthly AWS bill. Adjust sliders to match your expected usage.</p>
+    <div class="badge"><i class="ti ti-gift" style="font-size:12px;"></i> AWS Free Tier savings automatically applied</div>
+  </div>
+
+  <div id="services"></div>
+
+  <div class="summary">
+    <div class="summary-header">
+      <h2>Monthly estimate</h2>
+      <button class="export-btn" onclick="exportSummary()">
+        <i class="ti ti-download"></i> Export
+      </button>
+    </div>
+    <div class="breakdown" id="breakdown"></div>
+    <div class="total-row">
+      <span class="total-label">Estimated total</span>
+      <div>
+        <span class="total-amount" id="total-cost">$0.00</span>
+        <span class="total-period">/month</span>
+      </div>
+    </div>
+    <div class="free-note" id="free-note">
+      <i class="ti ti-star" style="font-size:16px;"></i>
+      Your usage falls within AWS Free Tier limits — $0 estimated!
+    </div>
+    <div class="chart-wrap">
+      <canvas id="chart" role="img" aria-label="Bar chart showing monthly cost breakdown per AWS service">Service cost breakdown</canvas>
+    </div>
+  </div>
+
+  <div class="footer">
+    Prices based on AWS US East (N. Virginia). For exact pricing visit
+    <a href="https://aws.amazon.com/pricing/" target="_blank">aws.amazon.com/pricing</a>
+  </div>
+
+</div>
+
+<script>
+const services = [
+  {
+    id: 'ec2', label: 'EC2', desc: 'Virtual servers (compute)',
+    icon: 'ti-server', color: '#378ADD',
+    freeTier: '750 hrs/mo of t2.micro free for 12 months',
+    controls: [
+      { id: 'ec2_type', label: 'Instance type', hint: 'Size of your server', type: 'select',
+        options: ['t2.micro (free tier)', 't3.small', 't3.medium', 't3.large', 'm5.large'],
+        prices: [0, 0.023, 0.0464, 0.0928, 0.192] },
+      { id: 'ec2_hours', label: 'Hours per month', hint: '730 = always on', type: 'range', min: 0, max: 730, step: 10, default: 730, unit: 'hrs' }
+    ],
+    calc: (v) => [0, 0.023, 0.0464, 0.0928, 0.192][v.ec2_type] * v.ec2_hours
+  },
+  {
+    id: 's3', label: 'S3', desc: 'Object storage',
+    icon: 'ti-bucket', color: '#639922',
+    freeTier: '5 GB storage + 20K GET requests free always',
+    controls: [
+      { id: 's3_storage', label: 'Storage (GB)', hint: 'First 5 GB free forever', type: 'range', min: 0, max: 500, step: 5, default: 5, unit: 'GB' },
+      { id: 's3_requests', label: 'GET requests (K)', hint: '20K free per month', type: 'range', min: 0, max: 1000, step: 10, default: 20, unit: 'K' }
+    ],
+    calc: (v) => Math.max(0, v.s3_storage - 5) * 0.023 + Math.max(0, v.s3_requests * 1000 - 20000) * 0.0000004
+  },
+  {
+    id: 'rds', label: 'RDS', desc: 'Managed relational database',
+    icon: 'ti-database', color: '#BA7517',
+    freeTier: '750 hrs/mo db.t3.micro + 20 GB storage free for 12 months',
+    controls: [
+      { id: 'rds_type', label: 'Instance class', hint: 'Database server size', type: 'select',
+        options: ['db.t3.micro (free tier)', 'db.t3.small', 'db.t3.medium', 'db.m5.large'],
+        prices: [0, 0.034, 0.068, 0.192] },
+      { id: 'rds_storage', label: 'Storage (GB)', hint: '20 GB free with free tier', type: 'range', min: 0, max: 500, step: 10, default: 20, unit: 'GB' }
+    ],
+    calc: (v) => [0, 0.034, 0.068, 0.192][v.rds_type] * 730 + Math.max(0, v.rds_storage - 20) * 0.115
+  },
+  {
+    id: 'lambda', label: 'Lambda', desc: 'Serverless functions',
+    icon: 'ti-bolt', color: '#D4537E',
+    freeTier: '1M requests + 400K GB-seconds free every month always',
+    controls: [
+      { id: 'lambda_req', label: 'Requests (M/mo)', hint: '1M free every month', type: 'range', min: 0, max: 100, step: 1, default: 1, unit: 'M' },
+      { id: 'lambda_dur', label: 'Avg duration (ms)', hint: 'How long each function runs', type: 'range', min: 100, max: 5000, step: 100, default: 200, unit: 'ms' }
+    ],
+    calc: (v) => {
+      const reqCharge = Math.max(0, v.lambda_req * 1e6 - 1e6) * 0.0000002;
+      const gbSec = v.lambda_req * 1e6 * (v.lambda_dur / 1000) * 0.125;
+      return reqCharge + Math.max(0, gbSec - 400000) * 0.0000166667;
+    }
+  },
+  {
+    id: 'cloudfront', label: 'CloudFront', desc: 'CDN & content delivery',
+    icon: 'ti-world', color: '#533AB7',
+    freeTier: '1 TB data transfer + 10M requests free always',
+    controls: [
+      { id: 'cf_transfer', label: 'Data transfer (TB)', hint: 'First 1 TB free every month', type: 'range', min: 0, max: 50, step: 1, default: 1, unit: 'TB' },
+      { id: 'cf_requests', label: 'HTTP requests (M)', hint: '10M free every month', type: 'range', min: 0, max: 500, step: 10, default: 10, unit: 'M' }
+    ],
+    calc: (v) => Math.max(0, v.cf_transfer - 1) * 85 + Math.max(0, v.cf_requests * 1e6 - 10e6) * 0.0000085
+  },
+  {
+    id: 'dynamodb', label: 'DynamoDB', desc: 'NoSQL database',
+    icon: 'ti-table', color: '#1D9E75',
+    freeTier: '25 GB storage + 25 WCU + 25 RCU free always',
+    controls: [
+      { id: 'ddb_storage', label: 'Storage (GB)', hint: '25 GB free forever', type: 'range', min: 0, max: 200, step: 5, default: 25, unit: 'GB' },
+      { id: 'ddb_wcu', label: 'Write capacity (WCU)', hint: '25 WCU free forever', type: 'range', min: 0, max: 100, step: 1, default: 25, unit: 'WCU' }
+    ],
+    calc: (v) => Math.max(0, v.ddb_storage - 25) * 0.25 + Math.max(0, v.ddb_wcu - 25) * 0.00065 * 730
+  }
+];
+
+const state = {};
+let chart = null;
+
+function initState() {
+  services.forEach(s => s.controls.forEach(c => {
+    state[c.id] = c.type === 'range' ? c.default : 0;
+  }));
+}
+
+function getCost(s) {
+  const v = {};
+  s.controls.forEach(c => { v[c.id] = state[c.id]; });
+  return Math.max(0, s.calc(v));
+}
+
+function fmt(n) { return '$' + n.toFixed(2); }
+
+function buildServices() {
+  const container = document.getElementById('services');
+  services.forEach(s => {
+    const card = document.createElement('div');
+    card.className = 'service-card';
+    card.innerHTML = `
+      <div class="service-header" onclick="toggle('${s.id}')">
+        <div class="service-icon" style="background:${s.color}22;">
+          <i class="ti ${s.icon}" style="color:${s.color};"></i>
+        </div>
+        <div class="service-info">
+          <h3>${s.label} <span style="font-size:12px;font-weight:400;color:var(--text-secondary);">— ${s.desc}</span></h3>
+          <p><i class="ti ti-gift" style="font-size:11px;vertical-align:-1px;"></i> ${s.freeTier}</p>
+        </div>
+        <span class="service-cost" id="cost-${s.id}">$0.00</span>
+        <i class="ti ti-chevron-down chevron" id="chev-${s.id}"></i>
+      </div>
+      <div class="service-body" id="body-${s.id}">
+        ${s.controls.map(c => buildControl(c)).join('')}
+        <div class="service-tip">
+          <i class="ti ti-info-circle"></i>
+          Prices are approximate. Region: US East (N. Virginia).
+        </div>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function buildControl(c) {
+  if (c.type === 'range') {
+    return `<div class="control-row">
+      <div class="control-label">
+        <div class="name">${c.label}</div>
+        <div class="hint">${c.hint}</div>
+      </div>
+      <input type="range" min="${c.min}" max="${c.max}" step="${c.step}" value="${c.default}"
+        oninput="onRange('${c.id}', this.value)" />
+      <div class="control-val" id="val-${c.id}">${c.default} ${c.unit}</div>
+    </div>`;
+  }
+  const opts = c.options.map((o, i) => `<option value="${i}">${o}</option>`).join('');
+  return `<div class="control-row">
+    <div class="control-label">
+      <div class="name">${c.label}</div>
+      <div class="hint">${c.hint}</div>
+    </div>
+    <select onchange="onSelect('${c.id}', this.value)">${opts}</select>
+  </div>`;
+}
+
+function toggle(sid) {
+  document.getElementById('body-' + sid).classList.toggle('open');
+  document.getElementById('chev-' + sid).classList.toggle('open');
+}
+
+function findService(cid) {
+  return services.find(s => s.controls.some(c => c.id === cid));
+}
+
+function onRange(cid, val) {
+  state[cid] = parseFloat(val);
+  const c = services.flatMap(s => s.controls).find(c => c.id === cid);
+  document.getElementById('val-' + cid).textContent = parseFloat(val) + ' ' + c.unit;
+  refreshCost(findService(cid));
+  updateSummary();
+}
+
+function onSelect(cid, val) {
+  state[cid] = parseInt(val);
+  refreshCost(findService(cid));
+  updateSummary();
+}
+
+function refreshCost(s) {
+  document.getElementById('cost-' + s.id).textContent = fmt(getCost(s));
+}
+
+function updateSummary() {
+  const total = services.reduce((sum, s) => sum + getCost(s), 0);
+  document.getElementById('total-cost').textContent = fmt(total);
+  document.getElementById('free-note').style.display = total < 0.01 ? 'flex' : 'none';
+
+  document.getElementById('breakdown').innerHTML = services.map(s => {
+    const c = getCost(s);
+    const pct = total > 0 ? ((c / total) * 100).toFixed(0) + '%' : '—';
+    return `<div class="breakdown-row">
+      <span class="dot" style="background:${s.color};"></span>
+      <span class="breakdown-name">${s.label}</span>
+      <span class="breakdown-pct">${pct}</span>
+      <span class="breakdown-amount">${fmt(c)}</span>
+    </div>`;
+  }).join('');
+
+  updateChart();
+}
+
+function updateChart() {
+  const data = services.map(s => parseFloat(getCost(s).toFixed(2)));
+  if (!chart) {
+    const ctx = document.getElementById('chart').getContext('2d');
+    chart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: services.map(s => s.label),
+        datasets: [{ data, backgroundColor: services.map(s => s.color), borderRadius: 5, borderSkipped: false }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' $' + ctx.raw.toFixed(2) + '/mo' } } },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#888' } },
+          y: { grid: { color: 'rgba(128,128,128,0.15)' }, ticks: { callback: v => '$' + v, font: { size: 11 }, color: '#888' } }
+        }
+      }
+    });
+  } else {
+    chart.data.datasets[0].data = data;
+    chart.update('none');
+  }
+}
+
+function exportSummary() {
+  const total = services.reduce((sum, s) => sum + getCost(s), 0);
+  const now = new Date().toLocaleDateString();
+  const lines = [
+    'AWS Cost Estimate',
+    'Generated: ' + now,
+    'Region: US East (N. Virginia)',
+    '='.repeat(35),
+    '',
+    ...services.map(s => s.label.padEnd(16) + fmt(getCost(s)) + '/mo'),
+    '',
+    '='.repeat(35),
+    'TOTAL ESTIMATE'.padEnd(16) + fmt(total) + '/mo',
+    '',
+    'Note: Prices are estimates. Visit aws.amazon.com/pricing for exact rates.',
+  ];
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'aws-cost-estimate.txt';
+  a.click();
+}
+
+initState();
+buildServices();
+services.forEach(s => refreshCost(s));
+updateSummary();
+</script>
+</body>
+</html>
